@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount, useChainId } from 'wagmi';
+import { useAccount, useChainId, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -10,12 +10,16 @@ export default function Home() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const router = useRouter();
+  const { sendTransaction, data: hash, isPending, error } = useSendTransaction();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+  
   const [selectedAmount, setSelectedAmount] = useState(0);
   const [customAmount, setCustomAmount] = useState('');
   const [duration, setDuration] = useState(365);
   const [activeTab, setActiveTab] = useState('dca');
   const [bestRate, setBestRate] = useState<{ token: string; rate: string } | null>(null);
   const [allRates, setAllRates] = useState<{ token: string; rate: string; logo: string }[]>([]);
+  const [transactionData, setTransactionData] = useState<any>(null);
 
   const presetAmounts = [10, 100, 1000];
 
@@ -40,6 +44,7 @@ export default function Home() {
 
     let bestToken = '';
     let bestAmount = '0';
+    let bestTransactionData = null;
     const rates: { token: string; rate: string; logo: string }[] = [];
 
     for (const token of tokens) {
@@ -59,6 +64,7 @@ export default function Home() {
           if (parseFloat(data.amountOut) > parseFloat(bestAmount)) {
             bestAmount = data.amountOut;
             bestToken = token.name;
+            bestTransactionData = data; // Store the full transaction data
           }
         }
       } catch (error) {
@@ -70,8 +76,9 @@ export default function Home() {
     rates.sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate));
     setAllRates(rates);
 
-    if (bestToken) {
+    if (bestToken && bestTransactionData) {
       setBestRate({ token: bestToken, rate: bestAmount });
+      setTransactionData(bestTransactionData);
     }
   }, [address, getAmount]);
 
@@ -87,53 +94,39 @@ export default function Home() {
   }, [getAmount, isConnected, address, checkBestRate]);
 
   const executeTrade = async () => {
-    if (!bestRate || !address) {
+    if (!bestRate || !address || !transactionData) {
       alert('Please connect your wallet and select an amount first.');
       return;
     }
     
     const amount = getAmount();
-    const amountInWei = Math.floor(amount * 1000000); // USDC has 6 decimals
+    const transactionType = activeTab === 'dca' ? 'DCA Strategy Setup' : 'One-Time Purchase';
+    const totalAmount = activeTab === 'dca' ? getTotalAmount() : amount;
     
     try {
-      // Get the token address based on best rate
-      const tokenAddresses = {
-        'CBBTC': '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf',
-        'LBTC': '0xecac9c5f704e954931349da37f60e39f515c11c1',
-        'WBTC': '0x0555e30da8f98308edb960aa94c0db47230d2b9c'
-      };
-      
-      const tokenOut = tokenAddresses[bestRate.token as keyof typeof tokenAddresses];
-      
-      // Get the transaction data from Enso API
-      const response = await fetch(
-        `https://api.enso.finance/api/v1/shortcuts/route?chainId=8453&slippage=500&fromAddress=${address}&amountIn=${amountInWei}&tokenIn=0x833589fcd6edb6e08f4c7c32d4f71b54bda02913&tokenOut=${tokenOut}`
-      );
-      
-      const routeData = await response.json();
-      
-      if (routeData.tx) {
-        // In a real implementation, this would use wagmi to execute the transaction
-        const transactionType = activeTab === 'dca' ? 'DCA Strategy Setup' : 'One-Time Purchase';
-        const totalAmount = activeTab === 'dca' ? getTotalAmount() : amount;
-        const durationInfo = activeTab === 'dca' ? `\nDuration: ${duration} days\nDaily: ${amount} USDC` : '';
-        
-        alert(`${transactionType} prepared!\n\nWallet: ${address}\nSwapping: ${amount} USDC → ${bestRate.token}\nExpected output: ${parseFloat(bestRate.rate).toFixed(8)} tokens${durationInfo}\nTotal: $${totalAmount.toLocaleString()}\n\nTransaction data ready for wallet signature.`);
-        
-        // Here you would typically call:
-        // const { writeContract } = useWriteContract();
-        // await writeContract(routeData.tx);
-        
-        console.log('Transaction data:', routeData.tx);
-        console.log('Connected wallet:', address);
-        console.log('Chain ID:', chainId);
-        console.log('Transaction type:', transactionType);
-      } else {
-        throw new Error('Failed to get transaction data from Enso API');
+      if (!transactionData.tx) {
+        throw new Error('No transaction data available');
       }
+
+      // Execute the transaction using wagmi
+      console.log('Executing transaction with data:', transactionData.tx);
+      console.log('Gas estimate:', transactionData.gas);
+      console.log('Expected output:', transactionData.amountOut);
+      console.log('Min output:', transactionData.minAmountOut);
+      console.log('Price impact:', transactionData.priceImpact);
+
+      await sendTransaction({
+        to: transactionData.tx.to as `0x${string}`,
+        data: transactionData.tx.data as `0x${string}`,
+        value: BigInt(transactionData.tx.value || '0'),
+        gas: BigInt(transactionData.gas)
+      });
+
+      // Transaction is now pending, the UI will update based on the transaction state
+      
     } catch (error) {
       console.error('Error executing trade:', error);
-      alert('Error executing trade. Please try again.');
+      alert(`Error executing trade: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -149,7 +142,7 @@ export default function Home() {
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">🌲</span>
             </div>
-            <span className="text-xl font-bold text-gray-900">btc maximzer</span>
+            <span className="text-xl font-bold text-gray-900">BTC Maximizer</span>
           </button>
           <nav className="flex space-x-8">
             <button 
@@ -294,17 +287,33 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Transaction Status */}
+              {hash && (
+                <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-sm font-medium text-blue-700 mb-2">Transaction Status</div>
+                  <div className="text-xs text-blue-600 mb-2">Hash: {hash}</div>
+                  {isConfirming && <div className="text-sm text-blue-600">⏳ Confirming transaction...</div>}
+                  {isConfirmed && <div className="text-sm text-green-600">✅ Transaction confirmed!</div>}
+                  {error && <div className="text-sm text-red-600">❌ Error: {error.message}</div>}
+                </div>
+              )}
+
               {/* Confirm Button */}
               <button
                 onClick={executeTrade}
-                disabled={getAmount() <= 0}
+                disabled={getAmount() <= 0 || isPending || isConfirming || !transactionData}
                 className={`w-full py-4 rounded-lg font-medium text-lg transition-colors ${
-                  getAmount() > 0
+                  getAmount() > 0 && transactionData && !isPending && !isConfirming
                     ? 'bg-gray-600 text-white hover:bg-gray-700'
                     : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {activeTab === 'dca' ? 'Setup DCA Strategy' : 'Buy Bitcoin Now'}
+                {isPending && '⏳ Confirming...'}
+                {isConfirming && '⏳ Processing...'}
+                {isConfirmed && '✅ Completed'}
+                {!isPending && !isConfirming && !isConfirmed && (
+                  activeTab === 'dca' ? 'Setup DCA Strategy' : 'Buy Bitcoin Now'
+                )}
               </button>
             </div>
 

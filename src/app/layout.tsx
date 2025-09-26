@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "btc maximzer - BTC DCA",
-  description: "Bitcoin Dollar Cost Averaging with btc maximzer",
+  title: "BTC Maximizer - BTC DCA",
+  description: "Bitcoin Dollar Cost Averaging with BTC Maximizer",
 };
 
 export default function RootLayout({

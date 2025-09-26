@@ -1,4 +1,4 @@
-# btc maximzer
+# BTC Maximizer
 
 A Bitcoin Dollar Cost Averaging (DCA) application built with Next.js and integrated with Enso Protocol for optimal swap rates.
 

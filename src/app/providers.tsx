@@ -19,7 +19,7 @@ import {
 } from '@tanstack/react-query';
 
 const config = getDefaultConfig({
-  appName: 'btc maximzer BTC DCA',
+  appName: 'BTC Maximizer BTC DCA',
   projectId: 'YOUR_PROJECT_ID', // Get from https://cloud.walletconnect.com
   chains: [base, mainnet, polygon, optimism, arbitrum],
   ssr: true, // If your dApp uses server side rendering (SSR)
