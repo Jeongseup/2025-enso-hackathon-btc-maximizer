@@ -31,18 +31,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider
-          theme={{
-            colors: {
-              accentColor: '#0000FF',
-              accentColorForeground: 'white',
-              connectButtonBackground: '#0000FF',
-              connectButtonText: 'white',
-              connectionIndicator: '#0000FF',
-              selectedOptionBorder: '#0000FF',
-            },
-          }}
-        >
+            <RainbowKitProvider
+              appInfo={{
+                appName: 'BTC Maximizer',
+              }}
+            >
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

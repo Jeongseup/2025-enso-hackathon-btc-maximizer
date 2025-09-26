@@ -9,8 +9,8 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt as useWaitForApprovalReceipt,
 } from "wagmi";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 
 interface TransactionData {
   gas: string;
@@ -35,7 +35,6 @@ interface TransactionData {
 
 export default function Home() {
   const { address, isConnected } = useAccount();
-  const router = useRouter();
   const {
     sendTransaction,
     data: hash,
@@ -61,10 +60,6 @@ export default function Home() {
   const [customAmount, setCustomAmount] = useState("");
   const [duration, setDuration] = useState(365);
   const [activeTab, setActiveTab] = useState("dca");
-  const [bestRate, setBestRate] = useState<{
-    token: string;
-    rate: string;
-  } | null>(null);
   const [allRates, setAllRates] = useState<
     { token: string; rate: string; logo: string }[]
   >([]);
@@ -140,8 +135,6 @@ export default function Home() {
       },
     ];
 
-    let bestToken = "";
-    let bestAmount = "0";
     let bestTransactionData = null;
     const rates: { token: string; rate: string; logo: string }[] = [];
 
@@ -159,10 +152,9 @@ export default function Home() {
             logo: token.logo,
           });
 
-          if (parseFloat(data.amountOut) > parseFloat(bestAmount)) {
-            bestAmount = data.amountOut;
-            bestToken = token.name;
-            bestTransactionData = data; // Store the full transaction data
+          // Store the transaction data for the first (best) rate
+          if (!bestTransactionData) {
+            bestTransactionData = data;
           }
         }
       } catch (error) {
@@ -174,8 +166,7 @@ export default function Home() {
     rates.sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate));
     setAllRates(rates);
 
-    if (bestToken && bestTransactionData) {
-      setBestRate({ token: bestToken, rate: bestAmount });
+    if (bestTransactionData) {
       setTransactionData(bestTransactionData);
     }
   }, [address, getAmount]);
@@ -183,11 +174,9 @@ export default function Home() {
   useEffect(() => {
     if (getAmount() > 0 && isConnected && address) {
       setAllRates([]); // Clear previous rates
-      setBestRate(null); // Clear previous best rate
       checkBestRate();
     } else {
       setAllRates([]);
-      setBestRate(null);
     }
   }, [getAmount, isConnected, address, checkBestRate]);
 
@@ -206,21 +195,15 @@ export default function Home() {
   }, [isApprovalConfirmed]);
 
   // Reset approval when amount changes
+  const currentAmount = getAmount();
   useEffect(() => {
     setIsApproved(false);
     setNeedsApproval(true);
-  }, [getAmount()]);
+  }, [currentAmount]);
 
-  // useEffect(() => {
-  //   if (error) {
-  //     alert(
-  //       `Transaction Failed: ${(error as any).shortMessage || error.message}`
-  //     );
-  //   }
-  // }, [error]);
 
   const executeTrade = async () => {
-    if (!bestRate || !address || !transactionData) {
+    if (!address || !transactionData) {
       alert("Please connect your wallet and select an amount first.");
       return;
     }
@@ -230,26 +213,12 @@ export default function Home() {
       return;
     }
 
-    const amount = getAmount();
-    const transactionType =
-      activeTab === "dca" ? "DCA Strategy Setup" : "One-Time Purchase";
-    const totalAmount = activeTab === "dca" ? getTotalAmount() : amount;
-
     try {
       if (!transactionData.tx) {
         throw new Error("No transaction data available");
       }
 
       // Execute the transaction using wagmi
-      console.log("Transaction type:", transactionType);
-      console.log("Total amount:", totalAmount);
-      console.log("Executing transaction with data:", transactionData.tx);
-      console.log("Gas estimate:", transactionData.gas);
-      console.log("Expected output:", transactionData.amountOut);
-      console.log("Min output:", transactionData.minAmountOut);
-      console.log("Price impact:", transactionData.priceImpact);
-
-      console.log("Tx:", transactionData);
 
       await sendTransaction({
         to: transactionData.tx.to as `0x${string}`,
@@ -259,7 +228,7 @@ export default function Home() {
 
       // Transaction is now pending, the UI will update based on the transaction state
       alert(
-        `${transactionType} executed successfully! Check your wallet for confirmation.`
+        `Transaction executed successfully! Check your wallet for confirmation.`
       );
     } catch (error) {
       console.error("Error executing trade:", error);
@@ -276,8 +245,8 @@ export default function Home() {
       {/* Header */}
       <header className="bg-white shadow-sm px-6 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <button
-            onClick={() => router.push("/")}
+          <Link
+            href="/"
             className="flex items-center space-x-2 hover:opacity-80 transition-opacity"
           >
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -286,7 +255,7 @@ export default function Home() {
             <span className="text-xl font-bold text-gray-900">
               BTC Maximizer
             </span>
-          </button>
+          </Link>
           <nav className="flex space-x-8">
             <button
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
